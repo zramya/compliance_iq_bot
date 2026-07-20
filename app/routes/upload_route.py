@@ -16,7 +16,7 @@ PDF_PATH = DATA_DIR / "compliance.pdf"
 
 
 # localhost:8000/api/v1/compliance/ingestion
-@router.post("/ingestion", status_code=status.HTTP_201_CREATED)
+@router.post("/ingestion", status_code=status.HTTP_200_OK)
 async def upload_compliance_data(pdf_file: UploadFile):
 
     if pdf_file.content_type != "application/pdf":
