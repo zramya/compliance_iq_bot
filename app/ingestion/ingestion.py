@@ -46,6 +46,7 @@ def ingest_pdf(pdf_filepath):
     chunks = splitter.split_documents(docs)
     print("total chunks")
     print(len(chunks))
+    print(f"Chunks metadata : {chunks[0].metadata}")
 
     # 4 load the embedding model & 5 generate the embeddings
     # 6. save it in vector db

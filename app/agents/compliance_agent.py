@@ -20,6 +20,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 
+class QueryRequest(BaseModel):
+    query: str
+    thread_id: Optional[str] = None
+
+
 class Citation(BaseModel):
     """Source citation for the generated answer."""
 
@@ -28,10 +33,6 @@ class Citation(BaseModel):
         default=None,
         description="Page number if available",
     )
-    source_url: Optional[str] = Field(
-        default=None,
-        description="Source document URL if available",
-    )
 
 
 class ComplianceResponse(BaseModel):
@@ -39,7 +40,7 @@ class ComplianceResponse(BaseModel):
 
     query: str = Field(description="The user's compliance question")
     answer: str = Field(
-        description="Grounded answer generated from retrieved regulatory clauses"
+        description="A concise, directly grounded answer to the user's question based only on the retrieved regulations."
     )
     citations: List[Citation] = Field(description="Supporting regulatory citations")
     rule_summary: List[str] = Field(
@@ -53,6 +54,9 @@ class ComplianceResponse(BaseModel):
     )
     total_tokens: Optional[int] = Field(
         default=None, description="Total tokens consumed"
+    )
+    langsmith_trace_id: Optional[str] = Field(
+        default=None, description="UUID for debugging and auditing"
     )
     disclaimer: str = Field(
         description="This response is based on retrieved regulatory documents uploaded"
@@ -69,27 +73,3 @@ compliance_agent = create_agent(
     response_format=ComplianceResponse,
     system_prompt=system_prompt,
 )
-
-
-response = compliance_agent.invoke(
-    {
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hi",
-            }
-        ]
-    }
-)
-
-agent_response: ComplianceResponse = response["structured_response"]
-
-# print(agent_response)  # pydantic format of the structure response
-
-usage = response["messages"][-1].usage_metadata
-
-agent_response.input_tokens = usage.get("input_tokens")
-agent_response.output_tokens = usage.get("output_tokens")
-agent_response.total_tokens = usage.get("total_tokens")
-# if you only json format
-print(agent_response.model_dump_json(indent=2))

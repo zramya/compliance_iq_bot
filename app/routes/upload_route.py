@@ -5,7 +5,7 @@ from pathlib import Path
 router = APIRouter(prefix="/api/v1/compliance")
 
 # Repository root
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # data folder outside app/
 DATA_DIR = BASE_DIR / "data"

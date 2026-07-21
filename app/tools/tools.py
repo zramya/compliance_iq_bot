@@ -14,7 +14,7 @@ _raw_conn = os.getenv("PG_CONNECTION_STRING_FTS")
 def regulatory_vector_search_tool(
     query: str,
     k: int = 5,
-    collection_name: str = "regulatory_docs",
+    collection_name: str = "reg_compliance_iq_bot",
 ):
     """
     Retrieve the top-k regulatory clauses using vector similarity search.
@@ -35,7 +35,7 @@ def regulatory_vector_search_tool(
 def regulatory_hybrid_search_tool(
     query: str,
     k: int = 5,
-    collection_name: str = "regulatory_docs",
+    collection_name: str = "reg_compliance_iq_bot",
 ):
     """
     Hybrid retrieval using:
@@ -62,7 +62,7 @@ def regulatory_metadata_search_tool(
     query: str,
     regulation_type: str,
     k: int = 5,
-    collection_name: str = "regulatory_docs",
+    collection_name: str = "reg_compliance_iq_bot",
 ):
     """
     Retrieve regulatory clauses filtered by regulation type
