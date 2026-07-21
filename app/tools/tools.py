@@ -11,7 +11,7 @@ _raw_conn = os.getenv("PG_CONNECTION_STRING_FTS")
 
 
 @tool
-def regulatory_vector_search_tool(
+def vector_search_tool(
     query: str,
     k: int = 5,
     collection_name: str = "reg_compliance_iq_bot",
@@ -32,7 +32,7 @@ def regulatory_vector_search_tool(
 
 
 @tool
-def regulatory_hybrid_search_tool(
+def hybrid_search_tool(
     query: str,
     k: int = 5,
     collection_name: str = "reg_compliance_iq_bot",
@@ -58,7 +58,7 @@ def regulatory_hybrid_search_tool(
 
 
 @tool
-def regulatory_metadata_search_tool(
+def metadata_search_tool(
     query: str,
     regulation_type: str,
     k: int = 5,
