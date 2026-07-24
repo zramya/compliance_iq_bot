@@ -40,8 +40,8 @@ def ingest_pdf(pdf_filepath):
 
     # 3 chunking
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,  # upto 1000 characters
-        chunk_overlap=200,  # upto 200 characters
+        chunk_size=512,  # upto 512 characters
+        chunk_overlap=120,  # upto 120 characters
     )
     chunks = splitter.split_documents(docs)
     print("total chunks")

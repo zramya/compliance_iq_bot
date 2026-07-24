@@ -7,7 +7,7 @@ import requests
 # Define your API endpoints here
 API_BASE_URL = "http://localhost:8000"  # Update with your actual backend URL
 UPLOAD_ENDPOINT = f"{API_BASE_URL}/api/v1/compliance/ingestion"
-QUERY_ENDPOINT = f"{API_BASE_URL}/query"
+QUERY_ENDPOINT = f"{API_BASE_URL}/api/v1/compliance/query"
 
 st.set_page_config(
     page_title="Regulatory Compliance Chat Assistant", page_icon="💬", layout="centered"
@@ -57,59 +57,86 @@ with st.sidebar:
                     )
 
 # -----------------------------------------------------------------------------
-# Main Chat Interface (GET Request)
+# Main Chat Interface (POST Request)
 # -----------------------------------------------------------------------------
+
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+st.sidebar.subheader("Previous Questions")
+
+for i, msg in enumerate(st.session_state.messages):
+    if msg["role"] == "user":
+        if st.sidebar.button(msg["content"], key=f"q_{i}"):
+            st.session_state.selected_question = msg["content"]
+
 # React to user input
-if prompt := st.chat_input("Ask something about your PDF..."):
-    # Display user message in chat message container
+if prompt := st.chat_input("Ask a compliance question..."):
+
+    # Display user message
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Add user message to chat history
+    # Save user message
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Display assistant response in chat message container
+    # Display assistant response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
 
-        with st.spinner("Searching document..."):
+        with st.spinner("Searching regulations..."):
             try:
-                # Pass the user query as a URL parameter for the GET request
-                params = {"search": prompt}
-                response = requests.get(QUERY_ENDPOINT, params=params)
+                payload = {"query": prompt}
+
+                response = requests.post(QUERY_ENDPOINT, json=payload, timeout=60)
 
                 if response.status_code == 200:
-                    # Parse the JSON response. Adjust the key based on your API schema
                     data = response.json()
-                    answer = data.get(
-                        "answer",
-                        data.get("response", "No answer found in the server response."),
+
+                    answer = data.get("answer", "No answer available.")
+                    citations = data.get("citations", [])
+
+                    # Build response text
+                    response_text = f"### Answer\n\n{answer}"
+
+                    if citations:
+                        response_text += "\n\n### Citations\n"
+
+                        for idx, citation in enumerate(citations, start=1):
+                            response_text += f"\n{idx}. {citation}"
+
+                    message_placeholder.markdown(response_text)
+
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response_text,
+                        }
                     )
 
-                    message_placeholder.markdown(answer)
-                    # Add assistant response to chat history
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": answer}
-                    )
                 else:
                     error_msg = (
-                        f"Error: Server returned status code {response.status_code}"
+                        f"Server Error ({response.status_code})\n\n" f"{response.text}"
                     )
                     message_placeholder.markdown(error_msg)
+
                     st.session_state.messages.append(
-                        {"role": "assistant", "content": error_msg}
+                        {
+                            "role": "assistant",
+                            "content": error_msg,
+                        }
                     )
 
             except requests.exceptions.RequestException as e:
-                error_msg = (
-                    f"Connection error: Could not connect to the backend server.\n{e}"
-                )
+                error_msg = f"Connection error:\n\n{e}"
+
                 message_placeholder.markdown(error_msg)
+
                 st.session_state.messages.append(
-                    {"role": "assistant", "content": error_msg}
+                    {
+                        "role": "assistant",
+                        "content": error_msg,
+                    }
                 )
