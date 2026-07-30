@@ -17,13 +17,35 @@ def vector_search_tool(
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Retrieve the top-k regulatory clauses using vector similarity search.
+    Semantic Vector Search.
 
-    Best for:
-    - Semantic similarity
-    - Concept-based retrieval
+    Use for:
+
+    - Definitions
+    - Concepts
+    - Explanations
+    - Regulatory guidance
+    - Policies
+    - General compliance questions
+
+    Examples:
+
+    - What is CET1?
+    - Explain ICAAP.
+    - What is CRR?
+
+    Do NOT use for:
+
+    - Circular IDs
+    - Regulation numbers
+    - Section numbers
+    - Clause numbers
+    - Notification IDs
     """
-
+    print("=" * 80)
+    print("VECTOR SEARCH")
+    print("Query:", query)
+    print("=" * 80)
     return _search_vector(
         query=query,
         k=k,
@@ -38,18 +60,29 @@ def hybrid_search_tool(
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Hybrid retrieval using:
+    Hybrid Search (FTS + Vector).
 
-    - PostgreSQL Full Text Search (BM25/FTS)
-    - PGVector cosine similarity
-    - Reciprocal Rank Fusion (RRF)
+    Use ONLY when:
 
-    Best for:
-    - Regulation numbers
-    - Circular IDs
-    - Mixed keyword + semantic queries
+    1. The query contains an exact regulatory reference
+    AND
+    2. The user asks for its explanation.
+
+    Examples:
+
+    - Explain RBI/2025-26/27
+    - Explain Section 13(2)
+    - Explain Regulation 23
+
+    Do not use for:
+
+    - Pure definitions
+    - Pure identifier lookups
     """
-
+    print("=" * 80)
+    print("HYBRID SEARCH")
+    print("Query:", query)
+    print("=" * 80)
     return _search_hybrid(
         query=query,
         k=k,
@@ -57,59 +90,119 @@ def hybrid_search_tool(
     )
 
 
+def _get_exact_search_term(query: str) -> str:
+    """
+    Extract the most relevant term for exact matching.
+    """
+    return query.split()[-1]
+
 @tool
-def metadata_search_tool(
+def fts_search_tool(
     query: str,
-    regulation_type: str,
+    regulation_type: str | None = None,
     k: int = 5,
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Retrieve regulatory clauses filtered by regulation type
-    (RBI, SEBI, Basel III) and prioritize the latest version.
+    PostgreSQL Full Text Search (FTS).
 
-    Useful when the user explicitly specifies the regulation.
+    Best for:
+    - RBI Circular IDs
+    - Regulation numbers
+    - Section numbers
+    - Clause numbers
+    - Notification IDs
+    - Exact regulatory keywords
+
+    Use only for exact lookups.
+    Do not use for conceptual explanations.
     """
 
-    sql = """
-    SELECT
-        e.document AS content,
-        e.cmetadata AS metadata,
-        ts_rank(
-            to_tsvector('english', e.document),
-            plainto_tsquery('english', %(query)s)
-        ) AS score
+    print("=" * 80)
+    print("Running Metadata (FTS) Search")
+    print("Query:", query)
+    print("Regulation Type:", regulation_type)
+    print("=" * 80)
 
-    FROM langchain_pg_embedding e
-    JOIN langchain_pg_collection c
-        ON c.uuid = e.collection_id
+    if regulation_type:
+        sql = """
+        SELECT
+            e.document AS content,
+            e.cmetadata AS metadata,
+            ts_rank(
+                to_tsvector('english', e.document),
+                plainto_tsquery('english', %(query)s)
+            ) AS score
 
-    WHERE
-        c.name = %(collection)s
-        AND e.cmetadata->>'regulation_type' = %(regulation_type)s
-        AND to_tsvector('english', e.document)
-            @@ plainto_tsquery('english', %(query)s)
+        FROM langchain_pg_embedding e
+        JOIN langchain_pg_collection c
+            ON c.uuid = e.collection_id
 
-    ORDER BY
-        CAST(e.cmetadata->>'version' AS FLOAT) DESC,
-        score DESC
+        WHERE
+            c.name = %(collection)s
+            AND e.cmetadata->>'regulation_type' = %(regulation_type)s
+            AND (
+                e.document ILIKE %(like_query)s
+                OR to_tsvector('english', e.document)
+                   @@ plainto_tsquery('english', %(query)s)
+            )
 
-    LIMIT %(k)s;
-    """
+        ORDER BY
+            CAST(COALESCE(e.cmetadata->>'version', '0') AS FLOAT) DESC,
+            score DESC
+
+        LIMIT %(k)s;
+        """
+
+        params = {
+            "query": query,
+            "like_query": f"%{_get_exact_search_term(query)}%",
+            "collection": collection_name,
+            "regulation_type": regulation_type,
+            "k": k,
+        }
+
+    else:
+        sql = """
+        SELECT
+            e.document AS content,
+            e.cmetadata AS metadata,
+            ts_rank(
+                to_tsvector('english', e.document),
+                plainto_tsquery('english', %(query)s)
+            ) AS score
+
+        FROM langchain_pg_embedding e
+        JOIN langchain_pg_collection c
+            ON c.uuid = e.collection_id
+
+        WHERE
+            c.name = %(collection)s
+            AND (
+                e.document ILIKE %(like_query)s
+                OR to_tsvector('english', e.document)
+                   @@ plainto_tsquery('english', %(query)s)
+            )
+
+        ORDER BY
+            score DESC
+
+        LIMIT %(k)s;
+        """
+
+        params = {
+            "query": query,
+            "like_query": f"%{_get_exact_search_term(query)}%",
+            "collection": collection_name,
+            "k": k,
+        }
 
     with psycopg.connect(_raw_conn, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                sql,
-                {
-                    "query": query,
-                    "collection": collection_name,
-                    "regulation_type": regulation_type,
-                    "k": k,
-                },
-            )
+            cur.execute(sql, params)
             rows = cur.fetchall()
-    return [
+
+    output = [
         {
             "content": row["content"],
             "metadata": row["metadata"],
@@ -118,29 +211,64 @@ def metadata_search_tool(
         for row in rows
     ]
 
+    print(f"Returned {len(output)} results")
+    return output
+
 
 def _search_fts(query: str, k: int, collection_name: str):
-    """Keyword search against the stored chunks using Postgres' tsvector/tsquery/ts_rank"""
+    """
+    Keyword search using PostgreSQL FTS with exact text match fallback.
+
+    Priority:
+    1. Exact document match (ILIKE)
+    2. PostgreSQL Full Text Search ranking
+    """
+
     sql = """
-       SELECT
-           e.document                                               AS content,
-           e.cmetadata                                              AS metadata,
-           ts_rank(
-               to_tsvector('english', e.document),
-               plainto_tsquery('english', %(query)s)
-           )                                                        AS fts_rank
-       FROM  langchain_pg_embedding  e
-       JOIN  langchain_pg_collection c ON c.uuid = e.collection_id
-       WHERE c.name = %(collection)s
-         AND to_tsvector('english', e.document)
-             @@ plainto_tsquery('english', %(query)s)
-       ORDER BY fts_rank DESC
-       LIMIT %(k)s;
-   """
+        WITH search_results AS (
+            SELECT
+                e.document AS content,
+                e.cmetadata AS metadata,
+                CASE
+                    WHEN e.document ILIKE %(like_query)s THEN 1.0
+                    ELSE COALESCE(
+                        ts_rank(
+                            to_tsvector('english', e.document),
+                            websearch_to_tsquery('english', %(query)s)
+                        ),
+                        0
+                    )
+                END AS fts_rank
+            FROM langchain_pg_embedding e
+            JOIN langchain_pg_collection c
+                ON c.uuid = e.collection_id
+            WHERE
+                c.name = %(collection)s
+                AND (
+                    e.document ILIKE %(like_query)s
+                    OR to_tsvector('english', e.document)
+                       @@ websearch_to_tsquery('english', %(query)s)
+                )
+        )
+        SELECT *
+        FROM search_results
+        ORDER BY fts_rank DESC
+        LIMIT %(k)s;
+    """
+
     print("Running FTS Search")
+
     with psycopg.connect(_raw_conn, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, {"query": query, "collection": collection_name, "k": k})
+            cur.execute(
+                sql,
+                {
+                    "query": query,
+                    "like_query": f"%{_get_exact_search_term(query)}%",
+                    "collection": collection_name,
+                    "k": k,
+                },
+            )
             rows = cur.fetchall()
 
     output = [
@@ -173,26 +301,32 @@ def _search_vector(query: str, k: int, collection_name: str):
 
 
 def _search_hybrid(query: str, k: int, collection_name: str):
-    """Merge vector and fts results using RRF (Reciprocal Rank Fusion)
-    Chunks appearing in both search results will rank higher than those in only one
-    The constant 60 prevents top-ranked outputs from dominating
-    How RRF scores for a chunk = sum of 1/(rank + 60)
-    """
+
     print("Running Hybrid Search")
 
-    vector_search_results = _search_vector(query, 5, collection_name)
-    fts_results = _search_fts(query, 5, collection_name)
+    vector_search_results = _search_vector(query, k, collection_name)
 
-    rrf_scores: dict[str, float] = {}
-    chunk_map: dict[str, dict] = {}
+    fts_results = _search_fts(query, k, collection_name)
+
+    rrf_scores = {}
+    chunk_map = {}
+
     for rank, doc in enumerate(vector_search_results):
+
         key = doc["content"][:120]
+
         rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
+
         chunk_map[key] = {"content": doc["content"], "metadata": doc["metadata"]}
+
     for rank, item in enumerate(fts_results):
+
         key = item["content"][:120]
+
         rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
+
         chunk_map[key] = {"content": item["content"], "metadata": item["metadata"]}
+
     ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
-    print(ranked)
-    return [chunk_map[key] for key, _ in ranked[:k]]
+
+    return [chunk_map[key] for key, score in ranked[:k] if score > 0]

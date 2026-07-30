@@ -10,7 +10,6 @@ router = APIRouter(prefix="/api/v1/compliance", tags=["Compliance Query"])
 
 @router.post("/query", response_model=ComplianceResponse)
 async def query_compliance(request: QueryRequest):
-
     try:
         result = process_query(request)
         return result
