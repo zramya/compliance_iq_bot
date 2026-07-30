@@ -72,6 +72,9 @@ for i, msg in enumerate(st.session_state.messages):
         if st.sidebar.button(msg["content"], key=f"q_{i}"):
             st.session_state.selected_question = msg["content"]
 
+if "qa_cache" not in st.session_state:
+    st.session_state.qa_cache = {}
+
 # React to user input
 if prompt := st.chat_input("Ask a compliance question..."):
 
@@ -106,6 +109,8 @@ if prompt := st.chat_input("Ask a compliance question..."):
 
                         for idx, citation in enumerate(citations, start=1):
                             response_text += f"\n{idx}. {citation}"
+
+                    st.session_state.qa_cache[prompt] = response_text
 
                     message_placeholder.markdown(response_text)
 

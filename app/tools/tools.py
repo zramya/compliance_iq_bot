@@ -137,7 +137,7 @@ def _search_fts(query: str, k: int, collection_name: str):
        ORDER BY fts_rank DESC
        LIMIT %(k)s;
    """
-
+    print("Running FTS Search")
     with psycopg.connect(_raw_conn, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, {"query": query, "collection": collection_name, "k": k})
@@ -152,7 +152,7 @@ def _search_fts(query: str, k: int, collection_name: str):
         for row in rows
     ]
 
-    # print(output)
+    print(output)
     return output
 
 
@@ -167,8 +167,8 @@ def _search_vector(query: str, k: int, collection_name: str):
         }
         for doc in docs
     ]
-
-    # print(output)
+    print("Running Vector Search")
+    print(output)
     return output
 
 
@@ -185,27 +185,14 @@ def _search_hybrid(query: str, k: int, collection_name: str):
 
     rrf_scores: dict[str, float] = {}
     chunk_map: dict[str, dict] = {}
-
-    # Walk the vector results in ranked order (best match first).
-    # enumerate gives rank 0, 1, 2... so we add +1 below to make ranks start at 1.
     for rank, doc in enumerate(vector_search_results):
-        # Use the first 120 chars of the chunk text as an identity key.
-        # Same chunk retrieved by both searches -> same key -> its scores add up.
         key = doc["content"][:120]
-        # RRF formula: score += 1 / (k_constant + rank). Better rank (smaller number)
-        # gives a bigger score. .get(key, 0) lets us accumulate across both loops.
         rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
-        # Remember the full chunk so we can rebuild the final list from the winning keys.
         chunk_map[key] = {"content": doc["content"], "metadata": doc["metadata"]}
-
-    # Same pass over the FTS results. A chunk found by BOTH searches gets scored
-    # twice here, which is exactly how RRF rewards agreement between the two methods.
     for rank, item in enumerate(fts_results):
         key = item["content"][:120]
         rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (60 + rank + 1)
         chunk_map[key] = {"content": item["content"], "metadata": item["metadata"]}
-    # this line sorts the results of our RRF calculations
-    # the higher scoring doc appears on top of the list
     ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
     print(ranked)
     return [chunk_map[key] for key, _ in ranked[:k]]
