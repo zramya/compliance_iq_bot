@@ -17,13 +17,35 @@ def vector_search_tool(
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Retrieve the top-k regulatory clauses using vector similarity search.
+    Semantic Vector Search.
 
-    Best for:
-    - Semantic similarity
-    - Concept-based retrieval
+    Use for:
+
+    - Definitions
+    - Concepts
+    - Explanations
+    - Regulatory guidance
+    - Policies
+    - General compliance questions
+
+    Examples:
+
+    - What is CET1?
+    - Explain ICAAP.
+    - What is CRR?
+
+    Do NOT use for:
+
+    - Circular IDs
+    - Regulation numbers
+    - Section numbers
+    - Clause numbers
+    - Notification IDs
     """
-
+    print("=" * 80)
+    print("VECTOR SEARCH")
+    print("Query:", query)
+    print("=" * 80)
     return _search_vector(
         query=query,
         k=k,
@@ -38,18 +60,29 @@ def hybrid_search_tool(
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Hybrid retrieval using:
+    Hybrid Search (FTS + Vector).
 
-    - PostgreSQL Full Text Search (BM25/FTS)
-    - PGVector cosine similarity
-    - Reciprocal Rank Fusion (RRF)
+    Use ONLY when:
 
-    Best for:
-    - Regulation numbers
-    - Circular IDs
-    - Mixed keyword + semantic queries
+    1. The query contains an exact regulatory reference
+    AND
+    2. The user asks for its explanation.
+
+    Examples:
+
+    - Explain RBI/2025-26/27
+    - Explain Section 13(2)
+    - Explain Regulation 23
+
+    Do not use for:
+
+    - Pure definitions
+    - Pure identifier lookups
     """
-
+    print("=" * 80)
+    print("HYBRID SEARCH")
+    print("Query:", query)
+    print("=" * 80)
     return _search_hybrid(
         query=query,
         k=k,
@@ -60,56 +93,110 @@ def hybrid_search_tool(
 @tool
 def metadata_search_tool(
     query: str,
-    regulation_type: str,
+    regulation_type: str | None = None,
     k: int = 5,
     collection_name: str = "reg_compliance_iq_bot",
 ):
     """
-    Retrieve regulatory clauses filtered by regulation type
-    (RBI, SEBI, Basel III) and prioritize the latest version.
+    PostgreSQL Full Text Search (FTS).
 
-    Useful when the user explicitly specifies the regulation.
+    Best for:
+    - RBI Circular IDs
+    - Regulation numbers
+    - Section numbers
+    - Clause numbers
+    - Notification IDs
+    - Exact regulatory keywords
+
+    Use only for exact lookups.
+    Do not use for conceptual explanations.
     """
 
-    sql = """
-    SELECT
-        e.document AS content,
-        e.cmetadata AS metadata,
-        ts_rank(
-            to_tsvector('english', e.document),
-            plainto_tsquery('english', %(query)s)
-        ) AS score
+    print("=" * 80)
+    print("Running Metadata (FTS) Search")
+    print("Query:", query)
+    print("Regulation Type:", regulation_type)
+    print("=" * 80)
 
-    FROM langchain_pg_embedding e
-    JOIN langchain_pg_collection c
-        ON c.uuid = e.collection_id
+    if regulation_type:
+        sql = """
+        SELECT
+            e.document AS content,
+            e.cmetadata AS metadata,
+            ts_rank(
+                to_tsvector('english', e.document),
+                plainto_tsquery('english', %(query)s)
+            ) AS score
 
-    WHERE
-        c.name = %(collection)s
-        AND e.cmetadata->>'regulation_type' = %(regulation_type)s
-        AND to_tsvector('english', e.document)
-            @@ plainto_tsquery('english', %(query)s)
+        FROM langchain_pg_embedding e
+        JOIN langchain_pg_collection c
+            ON c.uuid = e.collection_id
 
-    ORDER BY
-        CAST(e.cmetadata->>'version' AS FLOAT) DESC,
-        score DESC
+        WHERE
+            c.name = %(collection)s
+            AND e.cmetadata->>'regulation_type' = %(regulation_type)s
+            AND (
+                e.document ILIKE %(like_query)s
+                OR to_tsvector('english', e.document)
+                   @@ plainto_tsquery('english', %(query)s)
+            )
 
-    LIMIT %(k)s;
-    """
+        ORDER BY
+            CAST(COALESCE(e.cmetadata->>'version', '0') AS FLOAT) DESC,
+            score DESC
+
+        LIMIT %(k)s;
+        """
+
+        params = {
+            "query": query,
+            "like_query": f"%{query}%",
+            "collection": collection_name,
+            "regulation_type": regulation_type,
+            "k": k,
+        }
+
+    else:
+        sql = """
+        SELECT
+            e.document AS content,
+            e.cmetadata AS metadata,
+            ts_rank(
+                to_tsvector('english', e.document),
+                plainto_tsquery('english', %(query)s)
+            ) AS score
+
+        FROM langchain_pg_embedding e
+        JOIN langchain_pg_collection c
+            ON c.uuid = e.collection_id
+
+        WHERE
+            c.name = %(collection)s
+            AND (
+                e.document ILIKE %(like_query)s
+                OR to_tsvector('english', e.document)
+                   @@ plainto_tsquery('english', %(query)s)
+            )
+
+        ORDER BY
+            score DESC
+
+        LIMIT %(k)s;
+        """
+
+        params = {
+            "query": query,
+            "like_query": f"%{query}%",
+            "collection": collection_name,
+            "k": k,
+        }
 
     with psycopg.connect(_raw_conn, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                sql,
-                {
-                    "query": query,
-                    "collection": collection_name,
-                    "regulation_type": regulation_type,
-                    "k": k,
-                },
-            )
+            cur.execute(sql, params)
             rows = cur.fetchall()
-    return [
+
+    output = [
         {
             "content": row["content"],
             "metadata": row["metadata"],
@@ -117,6 +204,9 @@ def metadata_search_tool(
         }
         for row in rows
     ]
+
+    print(f"Returned {len(output)} results")
+    return output
 
 
 def _search_fts(query: str, k: int, collection_name: str):

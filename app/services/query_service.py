@@ -17,7 +17,12 @@ def process_query(request: QueryRequest) -> ComplianceResponse:
                     "content": request.query,
                 }
             ]
-        }
+        },
+        config={
+            "configurable": {
+                "thread_id": request.thread_id,
+            }
+        },
     )
 
     result: ComplianceResponse = response["structured_response"]

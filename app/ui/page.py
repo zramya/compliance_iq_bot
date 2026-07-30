@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import uuid
 
 # -----------------------------------------------------------------------------
 # Configuration & Setup
@@ -65,6 +66,9 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = str(uuid.uuid4())
+
 st.sidebar.subheader("Previous Questions")
 
 for i, msg in enumerate(st.session_state.messages):
@@ -91,7 +95,10 @@ if prompt := st.chat_input("Ask a compliance question..."):
 
         with st.spinner("Searching regulations..."):
             try:
-                payload = {"query": prompt}
+                payload = {
+                    "query": prompt,
+                    "thread_id": st.session_state.thread_id,
+                }
 
                 response = requests.post(QUERY_ENDPOINT, json=payload, timeout=60)
 

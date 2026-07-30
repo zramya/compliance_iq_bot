@@ -11,6 +11,7 @@ from app.tools.tools import (
     metadata_search_tool,
 )
 from app.agents.prompts import system_prompt
+from langgraph.checkpoint.memory import InMemorySaver
 
 # load the env variables
 load_dotenv()
@@ -18,6 +19,8 @@ load_dotenv()
 
 from pydantic import BaseModel, Field
 from typing import List, Optional
+
+memory = InMemorySaver()
 
 
 class QueryRequest(BaseModel):
@@ -54,4 +57,5 @@ compliance_agent = create_agent(
     ],
     response_format=ComplianceResponse,
     system_prompt=system_prompt,
+    checkpointer=memory,
 )
