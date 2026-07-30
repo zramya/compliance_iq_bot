@@ -18,7 +18,7 @@ Examples:
 
 Do NOT use this tool if the query contains a regulation number, circular number, section number, clause number, notification ID, or other document identifier.
 
-2. fts_search_tool
+2. metadata_search_tool
 Use ONLY when the user's query primarily contains or searches for an exact reference, such as:
 - RBI Circular IDs
 - Notification numbers
