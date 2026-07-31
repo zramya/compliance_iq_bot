@@ -8,9 +8,10 @@ import os
 from app.tools.tools import (
     vector_search_tool,
     hybrid_search_tool,
-    metadata_search_tool,
+    fts_search_tool,
 )
 from app.agents.prompts import system_prompt
+from langgraph.checkpoint.memory import InMemorySaver
 
 # load the env variables
 load_dotenv()
@@ -19,10 +20,13 @@ load_dotenv()
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+memory = InMemorySaver()
+
 
 class QueryRequest(BaseModel):
     query: str
     thread_id: Optional[str] = None
+    chat_history: list[dict] = Field(default_factory=list)
 
 
 class Citation(BaseModel):
@@ -50,8 +54,9 @@ compliance_agent = create_agent(
     tools=[
         vector_search_tool,
         hybrid_search_tool,
-        metadata_search_tool,
+        fts_search_tool,
     ],
     response_format=ComplianceResponse,
     system_prompt=system_prompt,
+    checkpointer=memory,
 )
