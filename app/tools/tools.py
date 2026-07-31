@@ -42,10 +42,9 @@ def vector_search_tool(
     - Clause numbers
     - Notification IDs
     """
-    print("=" * 80)
+    print("=" * 20)
     print("VECTOR SEARCH")
     print("Query:", query)
-    print("=" * 80)
     return _search_vector(
         query=query,
         k=k,
@@ -79,10 +78,9 @@ def hybrid_search_tool(
     - Pure definitions
     - Pure identifier lookups
     """
-    print("=" * 80)
+    print("=" * 20)
     print("HYBRID SEARCH")
     print("Query:", query)
-    print("=" * 80)
     return _search_hybrid(
         query=query,
         k=k,
@@ -95,6 +93,7 @@ def _get_exact_search_term(query: str) -> str:
     Extract the most relevant term for exact matching.
     """
     return query.split()[-1]
+
 
 @tool
 def fts_search_tool(
@@ -118,11 +117,10 @@ def fts_search_tool(
     Do not use for conceptual explanations.
     """
 
-    print("=" * 80)
+    print("=" * 20)
     print("Running Metadata (FTS) Search")
     print("Query:", query)
     print("Regulation Type:", regulation_type)
-    print("=" * 80)
 
     if regulation_type:
         sql = """
